@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which Pages Should an Editor Review First?</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #59636e;
+    --accent: #0b5cad;
+    --rule: #d8dee4;
+    --note: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1419;
+      --text: #e6e9ec;
+      --muted: #9aa5b1;
+      --accent: #6cb2f5;
+      --rule: #2d3640;
+      --note: #171d24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 18px;
+    line-height: 1.65;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  h1 {
+    font-size: 2rem;
+    line-height: 1.25;
+    margin: 0 0 12px;
+  }
+  h2 {
+    font-size: 1.4rem;
+    margin: 48px 0 12px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+  }
+  p { margin: 0 0 16px; }
+  ul, ol { margin: 0 0 16px; padding-left: 26px; }
+  li { margin-bottom: 8px; }
+  a { color: var(--accent); }
+  .meta {
+    color: var(--muted);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.9rem;
+    margin-bottom: 32px;
+  }
+  .abstract {
+    background: var(--note);
+    border-left: 4px solid var(--accent);
+    padding: 16px 20px;
+    margin-bottom: 8px;
+  }
+  .abstract h2 {
+    margin: 0 0 8px;
+    padding: 0;
+    border: 0;
+    font-size: 1.1rem;
+  }
+  .abstract p { margin: 0; }
+  nav {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.9rem;
+    margin: 24px 0 8px;
+  }
+  nav a { margin-right: 14px; white-space: nowrap; }
+  @media (max-width: 480px) {
+    body { font-size: 17px; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Which Pages Should an Editor Review First? Position-Adjusted Click-Through Analysis with Leakage-Audited Validation</h1>
+<p class="meta">[Mohammad Zahedul Islam] · [zahid1704@gmail.com]</p>
+
+<div class="abstract">
+<h2>Abstract</h2>
+<p>Content teams have limited review time, so they need to know which pages to look at first when click-through rate (CTR) is low. This study asks whether March 2026 search signals can rank pages by their CTR gap relative to other pages at the same search position, using a pseudonymized warehouse of Google Search Console data from the FlyRank ML Internship release. I built a transparent baseline that ranks 84,833 pages (at least 200 impressions) by estimated missed clicks against their position tier's median CTR, and compared it with logistic regression and random forest models that predict low-CTR pages in April 2026, validated by holding out whole clients and checked for leakage. With tier medians recomputed from training clients only, the random forest reached an AUC of 0.799 on 12 held-out clients against 0.774 for the baseline, a small and directional edge, while a deliberately leaked feature raised AUC to 0.989, showing why the audit matters. I therefore propose the simple rule as a human-reviewed prioritization aid for ordering a review queue, not as evidence that any edit will raise clicks, together with its limits, review rules, and monitoring triggers.</p>
+</div>
+
+<nav>
+  <a href="#introduction">Introduction</a>
+  <a href="#data">Data</a>
+  <a href="#methodology">Methodology</a>
+  <a href="#results">Results</a>
+  <a href="#limitations">Limitations</a>
+  <a href="#recommendations">Recommendations</a>
+  <a href="#reproducibility">Reproducibility</a>
+  <a href="#acknowledgments">Acknowledgments</a>
+</nav>
+
+<h2 id="introduction">Introduction</h2>
+
+<p>When someone searches on Google, the results page shows a list of web pages. Each time a page appears in that list, search tools count it as an "impression." Each time a person clicks it, that is a "click." The share of impressions that end in a click is the click-through rate, or CTR. A page can be seen thousands of times and still earn very few visits, and when that happens, its owner loses traffic they might have had.</p>
+
+<p>Not every low CTR is a problem. Pages near the top of the results naturally get more clicks than pages further down, so a CTR that looks poor for a page ranked first could be perfectly normal for a page ranked fifteenth. A fair comparison therefore has to account for where the page appears. Beyond position, many other things can lower CTR: the search page may answer the question without needing a click, ads or other features may take attention, or the page's title and description may simply fail to attract readers.</p>
+
+<p>This creates a practical problem for content teams. A large website can have tens of thousands of pages, but an editor can only review a few dozen each week. Which pages should they look at first? A useful answer would point to pages where many people already see the page, the CTR is lower than similar pages achieve at the same position, and an editor could realistically do something about it.</p>
+
+<p>This study approaches that problem in three steps. First, it builds a simple, readable rule. Each page is compared with other pages at the same position tier (positions 1 to 3, 4 to 10, 11 to 20, and 21 and beyond), and pages are ranked by "missed clicks," meaning the clicks they would have received at their tier's typical CTR minus the clicks they actually got. Second, it asks whether a machine-learning model can do better than this rule, by using signals from March 2026 to predict which pages will have a below-typical CTR in April 2026. Third, it checks the result carefully. Whole clients are held out of training so the model is tested on sites it has never seen, and the inputs are audited for leakage, which happens when information from the answer or the future slips into the model and makes it look better than it is.</p>
+
+<p>The data come from the FlyRank ML Internship release, a pseudonymized snapshot of production Google Search Console and Google Analytics records covering about 79 million daily rows. Client names, web addresses, search queries, and page text were removed or scrambled before release, so this work uses only observed measurements such as impressions, clicks, and average position.</p>
+
+<p>The aim is modest and practical. The paper does not claim to explain how Google ranks pages, and it does not claim that editing a page will raise its clicks. The data show what happened, not what would have happened otherwise. What the study offers is a measured, directional way to order a review list, an honest comparison between a simple rule and a model, and a set of limits, review rules, and monitoring checks that tell a person when the list should not be trusted.</p>
+
+<p>The rest of the paper describes the data and its limits, explains the method and the validation design, reports how the model compares with the baseline, and ends with ranked recommendations for human reviewers.</p>
+
+<h2 id="data">Data</h2>
+
+<p><strong>Source.</strong> The data come from the FlyRank ML Internship warehouse release (build v20260703), a frozen, pseudonymized snapshot exported on 2026-07-03. It combines Google Search Console records (what people saw and clicked in Google results) with Google Analytics records (what visitors did on the site). Client names, domains, web addresses, search queries, keywords, and page text were removed or replaced with scrambled codes before release, and the release is distributed under data-use terms that forbid trying to identify any client, page, or query. Nothing in this paper attempts that, and no raw data are republished here.</p>
+
+<p><strong>Tables.</strong> The release has four tables. This study uses one of them for its main analysis: the daily performance table, which has 78,835,655 rows covering 2025-01-27 to 2026-06-30. Each row is one page, for one client, on one day. I confirmed this in March 2026, where the row count (9,841,378) matched the number of distinct page, client, and day combinations exactly, so no row is duplicated.</p>
+
+<p><strong>Time windows.</strong> To avoid mixing the past with the future, the study uses two separate months. Signals (impressions, clicks, and average position) are measured in March 2026, and the outcome I try to predict is measured in April 2026. The two windows do not overlap. June 2026, the most recent month, was left untouched as a sealed test month and does not appear in any result.</p>
+
+<p><strong>Building one row per page.</strong> The daily table is too detailed for a page-level question, so for each month I added up each page's impressions and clicks, and calculated its CTR as total clicks divided by total impressions. I kept only days with search data and only pages with at least 200 impressions in the month, because CTR from very few impressions is mostly noise. This leaves 84,833 pages in March. Because the outcome requires a page to be visible in April too, 72,383 of them (85.3%) are used for the prediction task, so the results describe pages that stayed visible, not every page.</p>
+
+<p><strong>Average position and a correction.</strong> A page's average position is calculated from the sum of its daily positions divided by its impressions. In this data the position sum starts counting from zero, so the raw average can fall below 1 (the smallest value I saw was 0.02), which is impossible for a real ranking. I corrected this by adding 1 to each average position, giving a smallest value of 1.02. This affects which position tier a few pages fall into, and I mention it as a limitation.</p>
+
+<p><strong>What I excluded, and why.</strong></p>
+<ul>
+  <li><strong>Click-through rate and clicks as model inputs.</strong> The outcome is built from CTR, so using April CTR as an input would give the answer away. In a deliberate test, adding it raised the model's score from 0.80 to 0.99, which is the signature of leakage, so it was removed.</li>
+  <li><strong>Analytics engagement measures</strong> (such as engaged sessions and scroll events). Only about 4.2% of March rows have analytics data, because tracking began at different times for different clients, so these fields would describe a small and unrepresentative subset.</li>
+  <li><strong>AI-referral columns.</strong> Sessions from AI tools appear on only about 30,000 of 78.8 million daily rows, too few for reliable patterns.</li>
+  <li><strong>Product scores and flags.</strong> The release deliberately contains none of FlyRank's own health scores or decision flags, so nothing in this study copies those rules.</li>
+  <li><strong>Page metadata</strong> [such as word count and page age from the page-level table]. [Delete this item if you did not use it, or move it to "What I used" if you did.]</li>
+</ul>
+
+<p><strong>Limits of the data.</strong> The history is uneven: each client's tracking began on a different date, so clients differ in how much past data they have. Most daily rows (about 63% in March) contain no search data, since many pages are simply not shown on a given day. Position is an average across many queries, so it can hide a mix of very high and very low rankings. One month of features and one month of outcomes cannot show seasonal patterns. And all of this is observational: it shows what happened, not what would happen after changing a page.</p>
+
+<p><strong>Privacy.</strong> All identifiers in this paper are the scrambled codes from the release, and the paper reports only aggregate numbers and ranks. No client names, web addresses, search queries, or page text appear anywhere.</p>
+
+<h2 id="methodology">Methodology</h2>
+
+<p><strong>The question in one line.</strong> Using what a page looked like in March 2026, can I rank pages by how likely they are to have a lower-than-typical click-through rate (CTR) in April 2026, and does that beat a simple rule?</p>
+
+<p><strong>Assumptions.</strong></p>
+<ul>
+  <li>A page's CTR should be compared only with pages at a similar search position, because higher-ranked pages naturally get more clicks.</li>
+  <li>A page needs enough impressions for its CTR to mean something, so I kept only pages with at least 200 impressions in the month. This cutoff is a policy choice, not a universal truth.</li>
+  <li>Pages in the same client tend to resemble each other, so a fair test has to keep whole clients apart.</li>
+  <li>Everything here is observational. The data cannot show what would happen after a page is edited.</li>
+</ul>
+
+<p><strong>Position tiers and the typical CTR.</strong> I grouped pages into four position tiers: 1 to 3, 4 to 10, 11 to 20, and 21 and beyond. For each tier I took the median CTR as the "typical" CTR for pages at that position. A page is below its tier's typical CTR when its own CTR is lower than that median.</p>
+
+<p><strong>The label (what the model tries to predict).</strong> A page gets a label of 1 when its April 2026 CTR is below the typical CTR of its April position tier, and 0 otherwise. The label uses April data only. About 47% of test pages carry the label of 1, so a random guess is right about 47% of the time. This label is rule-based, not a separately observed outcome, which I discuss under limitations.</p>
+
+<p><strong>The features (what the model sees).</strong> Four inputs, all from March 2026:</p>
+<ul>
+  <li>the logarithm of the page's impressions (how often it was seen),</li>
+  <li>its average position,</li>
+  <li>its March CTR,</li>
+  <li>the typical CTR of its March position tier.</li>
+</ul>
+<p>Each is known before April begins, so none of them uses the future. I kept the list short on purpose, so every input can be explained in a sentence. [If you added page age or word count from the page table, add them here.]</p>
+
+<p><strong>The baseline (the rule to beat).</strong> The baseline needs no training. It scores each page by how far its March CTR falls below its tier's typical CTR, so pages with the largest gap rank first. A reviewer can read this rule and understand why any page is on the list. It is also the rule behind the queue in the recommendations.</p>
+
+<p><strong>The models.</strong> I compared the baseline with two models: logistic regression, which is simple and readable, and a random forest, which is a larger model that can pick up combinations of signals. I set the random forest's settings once [300 trees and a minimum of 20 pages per leaf] and did not tune them on the test results. I did not use gradient boosting, because the extra complexity was unlikely to pay off on four inputs from one month.</p>
+
+<p><strong>Validation design.</strong> The main test holds out whole clients. I split clients, not pages, into a training group (70%) and a test group (30%), so the model is always tested on sites it has never seen. In my split the test group had 12 clients and 22,434 pages, and no client or page appeared on both sides. For comparison, I also ran a random split of pages, where 35 of 36 test clients also appeared in training. Features come from March and the label from April, so the feature window ends before the outcome window begins. June 2026 stays sealed and unused.</p>
+
+<p><strong>Metrics, chosen before training.</strong> I report three numbers on the same test pages for every method. ROC AUC (the main metric) measures how well a method ranks label-1 pages above label-0 pages, where 0.5 is random guessing. Average precision summarizes how well the top of the ranking is filled with true cases. Precision at 100 asks how many of the 100 highest-ranked pages truly carry the label. Because a reviewer reads a list from the top down, the last two reflect how the queue would be used, but precision at 100 is based on only 100 pages and varies a lot, so I treat it with caution.</p>
+
+<p><strong>Leakage checks.</strong> Leakage means information from the answer or from the future slipping into the model, which makes results look better than they are. I checked for it in four ways:</p>
+<ol>
+  <li><strong>Time windows.</strong> Features come only from March (2026-03-01 to 2026-03-31) and the label only from April (2026-04-01 to 2026-04-30). They do not overlap.</li>
+  <li><strong>Forbidden columns.</strong> None of FlyRank's product scores or flags are in the data, and a check confirmed none appear among the inputs.</li>
+  <li><strong>Shared clients or pages.</strong> The test set shares no client or page with the training set.</li>
+  <li><strong>Typical CTRs computed from all pages.</strong> My first version calculated the tier medians over every page, including test pages, so the test pages influenced one of the model's inputs. I recomputed the medians from training clients only. This lowered the random forest's AUC from 0.812 to 0.799 and raised the baseline's from 0.753 to 0.774, so the clean gap between them is 0.025, not 0.059.</li>
+</ol>
+<p>I also ran a deliberate leak test: adding April CTR as an input raised AUC to 0.989, compared with 0.799 without it. That jump is what a leak looks like, and it confirms the checks can catch one. The leaked column was removed.</p>
+
+<p><strong>Interpretation.</strong> To see what the random forest relied on, I shuffled each input in turn on the held-out clients and measured how much AUC fell (permutation importance). March CTR mattered most by a wide margin, then average position, then impressions [these values come from the earlier version, before the tier-median fix]. This means the model mostly rediscovers the same signal the baseline uses. I also looked at where the model was wrong, by position tier, by volume, by client, and by whether the page changed tier between March and April.</p>
+
+<p><strong>A known remaining weakness.</strong> Requiring a page to have at least 200 impressions in both March and April means the pages I study are partly selected on April visibility, which is information from the outcome window. I could not remove this with the data available, so I report it as a limitation.</p>
+
+<p><strong>Reproducibility.</strong> Every step runs in the notebooks in the project repository, and the numbers in this paper trace to the metrics files saved from them.</p>
+
+<h2 id="results">Results</h2>
+
+<p><strong>Headline.</strong> On 12 held-out clients, a random forest ranked April 2026 low-CTR pages with an AUC of 0.799, against 0.774 for the simple rule. That is a small edge of 0.025, measured on one split and one pair of months, so I read it as directional. Both methods are well above guessing (0.5), which shows the March signals carry real information about April, but most of that information is already captured by the simple rule.</p>
+
+<p><strong>Main comparison, same pages and same split.</strong> All methods were scored on the same held-out clients (12 clients, 22,434 pages, with 47.1% carrying the label, so a random list would be right about 47% of the time).</p>
+
+<p>First run (tier medians computed from all pages):</p>
+<ul>
+  <li>Simple rule: AUC 0.753, average precision 0.692, precision at 100 of 0.77.</li>
+  <li>Logistic regression: AUC 0.785, average precision 0.703, precision at 100 of 0.68.</li>
+  <li>Random forest: AUC 0.812, average precision 0.771, precision at 100 of 0.98.</li>
+</ul>
+
+<p>After the leakage fix (tier medians computed from training clients only):</p>
+<ul>
+  <li>Simple rule: AUC 0.774.</li>
+  <li>Random forest: AUC 0.799, average precision 0.804, precision at 100 of 0.98.</li>
+</ul>
+
+<p>I report the second set as my main result, because the first let test pages influence one input. The fix lowered the forest's AUC and raised the rule's, so the gap between them shrank from 0.059 to 0.025. [I did not rerun logistic regression or the rule's average precision after the fix, so those appear only in the first run.]</p>
+
+<p><strong>Logistic regression.</strong> It beat the rule on AUC (0.785 against 0.753) but did worse at the top of the list (precision at 100 of 0.68 against 0.77), so I do not count it as a clear improvement.</p>
+
+<p><strong>What the random split showed.</strong> With a random split of pages instead of whole clients, the forest reached an AUC of 0.842 against 0.756 for the rule. In that design, 35 of the 36 test clients also appeared in training. Under the grouped split the forest dropped to 0.812 (same version of the medians), while the rule barely moved (0.753). So the random split flattered the model by about 0.03 AUC, and the grouped split is the fairer number.</p>
+
+<p><strong>What the model relies on.</strong> Shuffling each input and measuring the drop in AUC showed that March CTR mattered by far the most (a drop of about 0.24), followed by average position (about 0.08), impressions (about 0.02), and the tier's typical CTR (about 0.01). [These values come from the first run.] In other words, the model mostly uses the same idea as the rule: a page with a low CTR in March tends to still have a low CTR in April.</p>
+
+<p><strong>Where the model is wrong.</strong> At a 0.5 cutoff the forest was right on 73% of the 22,434 test pages, with 3,244 false alarms and 2,756 misses. Errors were highest for pages at positions 11 to 20 (39%) and lowest for positions 21 and beyond (11%). They fell as volume rose, from about 29 to 32% for low-volume pages to 19% for the highest-volume pages, which fits the idea that CTR is noisier with few impressions. Pages that moved to a different position tier between March and April were missed more often than pages that stayed (33% against 25%). One client supplied 17,092 of the 22,434 test pages (about 76%), so these error rates mostly describe that client.</p>
+
+<p><strong>The leakage test.</strong> To check that the audit could catch a leak, I added April CTR as an input on purpose. AUC jumped to 0.989 from 0.799. That jump is the signature of a leak, and I removed the column.</p>
+
+<p><strong>The review queue.</strong> Applying the simple rule to March gives a queue of 42,414 pages (about half of the 84,833 in the slice, which is expected because a median splits pages in two, so the queue size is not a finding). By suggested action:</p>
+<ul>
+  <li>review title and meta description (positions 4 to 10): 22,302 pages,</li>
+  <li>improve content coverage, then review title and meta (positions 11 to 20): 9,002 pages,</li>
+  <li>monitor only (position 21 and beyond): 9,347 pages,</li>
+  <li>check the search result page before editing (positions 1 to 3): 1,763 pages.</li>
+</ul>
+<p>The ten highest-ranked pages each have between 71,000 and 212,000 impressions and between 1 and 289 clicks, come from six clients, and sit mostly at positions 4 to 10. Pages with this many impressions and so few clicks may reflect tracking issues or search pages that answer the question directly, so a person should check them before anyone edits a title.</p>
+
+<p><strong>Figures.</strong> [Insert: (1) median CTR by position tier, from <code>median_ctr_by_tier.png</code>; (2) a bar chart of AUC for the rule, logistic regression, and the random forest on the held-out clients; (3) a bar chart of the permutation importances.]</p>
+
+<p><strong>What these results do and do not show.</strong> They show that March search signals can rank which pages will have a below-typical CTR in April, on clients the model never saw, and that a simple rule captures most of that ranking. They do not show why CTR is low, that the model would work on other months or other clients, or that editing a page would raise its clicks.</p>
+
+<h2 id="limitations">Limitations and Honest Framing</h2>
+
+<p>This study is a careful first look, not a finished product. The points below describe where its results stop being reliable, starting with the ones that matter most.</p>
+
+<p><strong>1. The label is a rule, not an observed outcome.</strong> I defined a "low-CTR page" as one whose April CTR falls below the median CTR of its position tier. That is a bucket calculated from the data, so the model is learning to predict a rule I wrote, not something that happened in the world independently. A page can be labeled low-CTR simply because the tier median shifted. A stronger design would use a separately observed outcome, such as a measured change in clicks after a known edit.</p>
+
+<p><strong>2. One pair of months.</strong> Signals come from March 2026 and the outcome from April 2026. A single month pair cannot show seasonality, one-off events, or whether the pattern holds at other times of year. The results may not repeat in a different pair of months. June 2026 was kept sealed and was never used, so I have no final test on newer data.</p>
+
+<p><strong>3. The pages studied are partly selected on the outcome.</strong> To build the label, a page had to have at least 200 impressions in both March and April. That means pages were kept partly because they stayed visible in April, which is information from the outcome window. 72,383 of 84,833 March pages (85.3%) survive this filter. The results describe pages that stayed visible, not every page, and I could not remove this with the data available.</p>
+
+<p><strong>4. The edge over the simple rule is small.</strong> After fixing a leak in how the typical CTRs were computed, the random forest scored an AUC of 0.799 against 0.774 for the rule, a difference of 0.025. That is on one split of clients and is small enough that I would not call the model a clear win. In practice, the readable rule does almost as well, so the rule is the main recommendation and the model is a possible second opinion.</p>
+
+<p><strong>5. The test set is small in clients and uneven.</strong> The test group held 12 clients. In an earlier version of the split, a single client supplied about 76% of the test pages, so the error rates and scores may reflect that client more than clients in general. [If you ran the five-seed check: "Across five different splits, the forest's AUC ranged from X to Y."] [If you did not: "I did not repeat the split with different seeds, so I cannot say how stable the result is."]</p>
+
+<p><strong>6. Average position hides detail.</strong> A page's average position blends many search queries, some where it ranks well and some where it ranks poorly. A page with a low CTR might simply have a mix of high and low rankings. Pages near a tier boundary, such as average position 10.2 against 9.8, are compared with different groups, so their ranking is less certain. The data contain no individual queries I could use to look inside the average.</p>
+
+<p><strong>7. A low CTR has many possible causes.</strong> The search page may answer the question without a click, ads or other features may take attention, the query may be informational, or a related page on the same site may have absorbed the traffic. The study cannot tell these apart from a weak title or description, so the queue says which pages to look at, not why they are low.</p>
+
+<p><strong>8. The data are observational.</strong> I watched what happened and did not run an experiment, so nothing here shows that changing a title, meta description, or content would raise clicks. Any rise in clicks after an edit could come from other causes, and this study cannot credit the edit.</p>
+
+<p><strong>9. A data issue that I corrected.</strong> The position sums in this data start counting from zero, so raw average positions could fall below 1 (the smallest I saw was 0.02). I corrected this by adding 1 to each average position, in the recommendations queue. [My earlier weeks' results used the uncorrected positions, so some pages near tier boundaries may fall in a different tier than they would now. I expect the conclusions to hold but did not rerun everything.] [Delete this bracket if you reran those notebooks.]</p>
+
+<p><strong>10. Uneven data coverage.</strong> Different clients began tracking on different dates, so the history is uneven. Only about 4.2% of March rows have analytics data, so I could not use engagement measures such as scroll depth. AI-referral traffic is too sparse to study. The study uses Google search data only and says nothing about other search engines or AI tools.</p>
+
+<p><strong>11. Thresholds are choices.</strong> The 200-impression cutoff, the four position tiers, the 2,000-impression line for the high-volume reason code, and the monitoring thresholds in the playbook are policy choices that I explained but did not test over time. Different cutoffs would change the queue.</p>
+
+<p><strong>12. Several numbers should be read with caution.</strong> Precision at 100 is based on only 100 pages and varies a lot between runs. Half of all pages fall below their tier median by construction, so the size of the queue (42,414 pages) says nothing about site quality. I did not tune the models on the test data, but I also did not explore many alternatives.</p>
+
+<p><strong>13. Not a production system.</strong> This is a research study and a plan for human reviewers. It is not tested in live use, has no automatic monitoring, and should not be used to change pages automatically or to judge anyone's work.</p>
+
+<p><strong>What the study does support.</strong> On clients the model had not seen, March search signals carried real information about which pages would have a below-typical CTR in April, and a simple, readable rule captured most of it. This is a measured, directional result that can help a person decide which pages to review first.</p>
+
+<h2 id="recommendations">Ranked Recommendations</h2>
+
+<p>These recommendations are written for a content editor or SEO reviewer with limited time. They describe how to use the queue, not changes to make automatically. Every suggestion is a place to look first, and none is a promise that an edit will raise clicks.</p>
+
+<p><strong>How the queue works.</strong> Every page with at least 200 impressions in March 2026 is compared with other pages in the same position tier. Pages whose CTR is below their tier's typical (median) CTR enter the queue, and each is ranked by estimated missed clicks: the clicks it would have earned at its tier's typical CTR, minus the clicks it actually got. This gave a queue of 42,414 pages out of 84,833. About half of all pages fall below their tier median by construction, so the size of the queue is not a finding. The order is what matters.</p>
+
+<p><strong>Recommendation 1: Start at the top, with a fixed weekly budget.</strong> Review a set number of pages each week, for example 20 to 50, beginning with rank 1. Pages with many impressions and a big CTR gap come first, because even a small improvement there is worth the most clicks. The ten highest-ranked pages each had between 71,000 and 212,000 impressions and between 1 and 289 clicks, and came from six clients.</p>
+
+<p><strong>Recommendation 2: Match the action to the position tier.</strong></p>
+<ul>
+  <li><strong>Positions 4 to 10 (22,302 pages): review the title and meta description.</strong> These pages already appear on the first page of results, so a clearer snippet is the most direct way to earn more of the clicks they are missing.</li>
+  <li><strong>Positions 11 to 20 (9,002 pages): improve how fully the page covers its topic, then review the title and meta description.</strong> These pages are close to the first page, so better coverage may help them rise, and a better snippet helps once they do.</li>
+  <li><strong>Positions 1 to 3 (1,763 pages): check the search results page before editing anything.</strong> A low CTR this high up often comes from ads, answer boxes, or other features, not from the title, so an edit may not help.</li>
+  <li><strong>Position 21 and beyond (9,347 pages): monitor only.</strong> Pages this far down get so few clicks that a snippet change is unlikely to matter until the page ranks higher.</li>
+</ul>
+
+<p><strong>Recommendation 3: Read the reason code.</strong> Each page carries a short code. <code>high_volume_low_ctr</code> means at least 2,000 March impressions, so the gap is large in absolute terms and the page deserves attention first. <code>low_ctr_for_position</code> means fewer impressions, so the gap is more likely to be noise, and these pages rank lower.</p>
+
+<p><strong>Recommendation 4: Check the data before acting on a high-volume page.</strong> A page with over 100,000 impressions and only a handful of clicks may reflect a tracking problem, an average position blended across very different queries, or a query where the search page answers the question without a click. A person should confirm in Search Console before anyone edits a title.</p>
+
+<p><strong>Recommendation 5: Human review checklist.</strong> Before acting on any queue row, a reviewer should:</p>
+<ul>
+  <li>confirm the numbers look believable in Search Console,</li>
+  <li>search the main query by hand and look at the results page,</li>
+  <li>ask whether the query is informational, where a low CTR can be normal,</li>
+  <li>check the page's CTR over several months, to rule out a one-month dip,</li>
+  <li>check whether a related page on the same site took the traffic,</li>
+  <li>be cautious with pages close to a tier boundary,</li>
+  <li>decide whether the suggested action fits the page and the client, and write down what was changed so the result can be checked later.</li>
+</ul>
+<p>Reviewers should record act, skip, or investigate for each page, with one line of reasoning. If most top pages are skipped for the same reason, the queue's rules need revisiting, not the pages.</p>
+
+<p><strong>Recommendation 6: Use the simple rule first, and the model as a second opinion.</strong> On clients the model had not seen, the readable rule reached an AUC of 0.774 and the random forest 0.799. The gap is small, so the rule is easier to trust, explain, and maintain. A reviewer who wants more confidence could compare both lists and give extra attention to pages that appear in both.</p>
+
+<p><strong>Recommendation 7: Think about cost and value.</strong> A reviewer's time is the limited resource, and the estimated missed clicks are a rough proxy for the value of looking at a page. The queue does not account for how valuable a click is, how hard an edit is, or how likely it is to work, so a reviewer should weigh those, or add a value measure such as cost per click if the data allow. [This study had no value data, so I did not include one.]</p>
+
+<p><strong>Recommendation 8: Watch for staleness.</strong> Rerun the queue monthly and compare it with March. Rebuild it if the median CTR in any position tier shifts by more than about 20%, if more than half of the top pages are skipped for the same reason, if the rule's AUC on the next month's pages falls by more than 0.05 from 0.774, if one client takes over the queue, or if a data or tracking change appears (as with the zero-based position correction in this study). These thresholds are starting points and have not been tested over time.</p>
+
+<p><strong>What should not be automated.</strong></p>
+<ul>
+  <li>Rewriting titles or meta descriptions automatically. The queue does not know why a CTR is low, so an automatic change could damage a page that was working for reasons the data cannot see.</li>
+  <li>Deleting, merging, or redirecting pages based only on the queue.</li>
+  <li>Claiming that any edit caused a rise in clicks. The data are observational, so credit needs a proper comparison.</li>
+  <li>Treating the number of flagged pages as a measure of site quality.</li>
+  <li>Using the queue on new clients or other months without checking it first.</li>
+  <li>Trying to work out which real sites, pages, or queries the scrambled codes stand for.</li>
+  <li>Judging a person or a team by queue results.</li>
+</ul>
+
+<p><strong>A related finding from the FlyRank report.</strong> FlyRank's own report, <em>The State of AI-Driven SEO</em> (April 2026), describes content results rising to a peak at roughly 61 to 90 days and declining after about 270 days without a refresh, and suggests reviewing older pages before that decline. This study did not test that claim and did not use page age, so I cite it as outside context only. Reviewers who have access to page age could combine it with this queue, treating it as a directional idea and not a result of this paper.</p>
+
+<p><strong>Summary.</strong> The queue is a way to order a review list. It points to pages where many people saw the page, the CTR is lower than similar pages get at the same position, and a person could realistically look into why. It is a decision-support tool for a human, and the human makes the call.</p>
+
+<h2 id="reproducibility">Reproducibility</h2>
+
+<p>Everything in this paper can be rerun from the project repository: [link to your GitHub repository]. The repository contains one notebook per stage of the work, in <code>work/notebooks/</code>:</p>
+
+<ul>
+  <li><code>w01_research_question.ipynb</code>: the question, the lane, and the claims this work can and cannot make.</li>
+  <li><code>w03_data_contract.ipynb</code>: what one row means, which tables and months are used, what is excluded, and three checks on the data (grain, row count and date span, and availability).</li>
+  <li><code>w04_baseline_score.ipynb</code>: the simple rule that ranks pages by missed clicks, with its reason code and action label.</li>
+  <li><code>w05_model.ipynb</code>: logistic regression and random forest, compared with the baseline on the same held-out clients.</li>
+  <li><code>w06_validation_audit.ipynb</code>: the random split against the grouped split, the leakage audit, and the claim rewrite.</li>
+  <li><code>w07_action_playbook.ipynb</code>: the ranked queue, review rules, the no-go list, and monitoring triggers.</li>
+  <li><code>capstone.ipynb</code>: the notebook that mirrors this paper.</li>
+</ul>
+
+<p><strong>What is and is not in the repository.</strong> The notebooks, the metrics files in <code>work/outputs/</code> (the numbers in this paper trace back to them), and the figures in <code>work/figures/</code> are committed. The ranked queue is a data file, so it is not committed. Running the playbook notebook regenerates it.</p>
+
+<p><strong>How to rerun.</strong></p>
+<ol>
+  <li>Request access to the dataset <code>FlyRank/internship-warehouse</code> on Hugging Face and accept its data-use terms (approval is instant). It is a gated dataset, so I cannot redistribute it.</li>
+  <li>Create a Hugging Face token with the plain "Read" type and store it in your notebook environment as a secret named <code>HF_TOKEN</code>. Never paste a token into a notebook, because the repository is public.</li>
+  <li>Run the notebooks in order. Each one reads the months it needs directly from the dataset with DuckDB. Reading one month takes several minutes, and for the playbook notebook I saved the March page table to a small local file so it need not be read twice.</li>
+  <li>For development I used March 2026 as the signal month and April 2026 as the outcome month, and I left June 2026 untouched as a sealed test month.</li>
+</ol>
+
+<p><strong>Settings I used.</strong> Pages needed at least 200 impressions in a month. Position tiers were 1 to 3, 4 to 10, 11 to 20, and 21 and beyond. The test group was 30% of clients, chosen with a fixed random seed (0). The random forest used 300 trees with at least 20 pages per leaf. [Confirm these against your notebooks.]</p>
+
+<p><strong>Known reproducibility notes.</strong> Results depend on which clients land in the test group, so rerunning with a different seed will change the numbers somewhat. The position values in the source data are zero-based, and I added 1 to each average position in the playbook queue. [My earlier notebooks used the uncorrected positions. Delete this sentence if you reran them.]</p>
+
+<h2 id="acknowledgments">Acknowledgments and Data Credit</h2>
+
+<p><strong>Built on the FlyRank ML Internship dataset</strong> (<a href="https://flyrank.ai">flyrank.ai</a>). This research uses the pseudonymized FlyRank internship warehouse release (build v20260703), a frozen snapshot of Google Search Console and Google Analytics data that FlyRank prepared, scrambled, and verified for educational use. I am grateful to FlyRank for making real production search data available for learning, and for the internship program, its sessions, and its guidance that shaped this work. The release is covered by data-use terms that forbid attempts to identify clients, domains, queries, keywords, or content, and this paper follows them: it reports only aggregate numbers and pseudonymized identifiers.</p>
+
+<p>For context, I also read FlyRank's own report, <em>The State of AI-Driven SEO</em> (April 2026), whose careful method notes and honest limitations section were a useful model for how to write up observational findings. The ideas in this paper are my own readings of the data, and any errors are mine.</p>
+
+</main>
+</body>
+</html>
